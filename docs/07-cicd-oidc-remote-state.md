@@ -487,3 +487,13 @@ Audienceは一致しているが、Environment用subjectもPull Request用subjec
 formatとbootstrap validateは成功した。bootstrap planは既存GitHub Actions Terraform RoleのTrust Policy変更1件だけを示し、追加0件、削除0件だった。apply結果も追加0件、変更1件、削除0件であり、post-apply bootstrap planは`No changes`となった。
 
 この時点で、Trust Policyは実行確認済みの同一リポジトリPull Request subjectと`terraform-production` Environment subjectを最小範囲で許可している。次の段階は、mainへのmergeでapply workflowを起動し、Environment OIDCによるRole引受、Remote Stateのlockfile、plan、およびNo changes時のapply完了を確認することである。
+
+### main merge後のapply workflow実動作確認
+
+最終Pull Requestチェックが成功し、確認済みのfeature branchをmainへmergeした。mainへのpushで`terraform-production` Environmentを使用するapply workflowが起動した。
+
+workflowでは、GitHub OIDCによる一時CredentialでRole引受に成功した。長期AWS Access KeyおよびSecret Access KeyをGitHub Secretsへ保存・使用していない。S3 Remote Backendの初期化とState読取りが完了し、`use_lockfile = true`を用いたterraform planが成功した。
+
+planは`No changes`で完了した。その確定planを引数としてterraform applyを実行し、結果は追加0件、変更0件、削除0件だった。既存AWS環境のdestroy、recreate、意図しない変更は発生していない。
+
+この確認により、同一リポジトリのPull Requestではread-only plan、main mergeでは`terraform-production` Environmentを介したOIDC認証・plan・applyというCI/CDフローが実動作することを確認した。
