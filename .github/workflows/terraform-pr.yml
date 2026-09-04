@@ -2,11 +2,6 @@ name: Terraform pull request
 
 on:
   pull_request:
-    paths:
-      - "**.tf"
-      - "**.tfvars.example"
-      - "backend.tf.example"
-      - ".github/workflows/terraform-pr.yml"
 
 permissions:
   contents: read
