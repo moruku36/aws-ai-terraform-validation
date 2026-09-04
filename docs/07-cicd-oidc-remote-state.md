@@ -447,3 +447,21 @@ Pull Request workflowだけに一時的な診断stepを追加した。stepはGit
 `aud`は一致している。一方、GitHubが発行した`sub`にはリポジトリ名の後ろではなくownerとrepositoryの間にリポジトリIDを含むカスタムsubject形式が使用されていたため、Trust Policyの`sub`条件と一致せず、`sts:AssumeRoleWithWebIdentity`が拒否された。workflowの`id-token: write`とOIDC Provider URLは原因ではない。
 
 この時点でTrust Policy、Role権限、S3権限は変更していない。診断stepは確認後に削除する一時コードとしてfeature branchに残しており、次の修正を実施する前に削除する。次の作業では、確認済みの正確な`sub`形式にTrust Policyを最小範囲で合わせ、その後に診断stepを削除して再実行する。
+
+### custom subject対応後のPull Request workflow再実行
+
+確認済みのPull Request用custom `sub`をbootstrap入力へ追加し、Trust PolicyのPull Request subjectだけをin-placeで更新した。Environment用subject、OIDC Provider、Audience、GitHub Actions Role inline policy、S3権限は変更していない。一時診断stepは削除した。
+
+bootstrap planは既存GitHub Actions RoleのTrust Policy更新1件だけを示し、追加0件、削除0件だった。apply後のbootstrap planは`No changes`となった。
+
+Pull Request workflowの再実行では、次をすべて確認した。
+
+- `terraform fmt -check -recursive`、Root/Bootstrapのinitとvalidateが成功。
+- `id-token: write`を使用したGitHub OIDC Role引受が成功。
+- 長期AWS Access Key/Secret Access KeyをGitHub Secretsに保存せず、OIDCの一時Credentialで実行。
+- S3 Remote Backendの初期化とState読取りが成功。
+- `use_lockfile = true`を用いたTerraform planが完了。
+- plan結果は`No changes`。
+- Pull Request workflowにterraform applyは存在せず、fork PRを除外する条件も維持。
+
+この検証の完了後、Trust Policyは実際に検証したPull Request subjectだけを許可している。`terraform-production` Environment向けのcustom subjectは未検証であり、main mergeのapply workflowを有効にして検証する前に、Environment実行時の`sub`を同じ方法で確認する必要がある。
