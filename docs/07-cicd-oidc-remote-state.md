@@ -465,3 +465,17 @@ Pull Request workflowの再実行では、次をすべて確認した。
 - Pull Request workflowにterraform applyは存在せず、fork PRを除外する条件も維持。
 
 この検証の完了後、Trust Policyは実際に検証したPull Request subjectだけを許可している。`terraform-production` Environment向けのcustom subjectは未検証であり、main mergeのapply workflowを有効にして検証する前に、Environment実行時の`sub`を同じ方法で確認する必要がある。
+
+### terraform-production Environment用OIDC subjectの事前確認
+
+mainへのpushでapply workflowを実行する前に、Pull Request workflowへ一時的なread-only診断jobを追加した。このjobは`terraform-production` Environmentを指定し、OIDC tokenのpayloadから`sub`と`aud`だけを出力した。AWS Role引受、Terraform backend初期化、State操作、terraform applyは実行していない。
+
+確認結果は次のとおりである（識別子は一般化）。
+
+- `aud`: `sts.amazonaws.com`
+- 実際のEnvironment `sub`: `repo:<owner>@<owner-id>/<repository>@<repository-id>:environment:terraform-production`
+- 現在Trust PolicyにあるEnvironment `sub`: `repo:<owner>/<repository>:environment:terraform-production`
+
+Audienceは一致しているが、Environment用subjectもPull Request用subjectと同様にcustom形式で発行されることを確認した。したがって、現時点でmain mergeのapply workflowを実行するとOIDC Role引受が拒否される。Trust Policy、Role inline policy、S3権限には変更を加えていない。
+
+一時診断jobは確認直後に削除した。次の作業では、確認済みEnvironment subjectをTrust Policyへ最小範囲で追加し、bootstrap planでRole Trust Policyだけの更新であることを確認してから適用する。
