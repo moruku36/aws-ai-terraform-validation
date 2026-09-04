@@ -12,6 +12,7 @@ AI/Codex にどこまでAWSインフラ実装を任せられるかを検証す�
 - EC2にPublic IPおよびSSH公開はなく、外部公開はALBのHTTPのみ
 - ALB経由でNginxのHTTP 200を確認済み
 - 最終 `terraform plan` は `No changes`
+- Pull RequestではTerraform定義を変更せず、CI/CD workflowの検証を段階的に実施する
 
 > このリポジトリには認証情報、Terraform state、実環境のリソースIDやIPアドレスを含めません。
 

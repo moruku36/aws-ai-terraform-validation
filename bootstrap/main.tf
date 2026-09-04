@@ -109,8 +109,8 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${var.github_repository}:ref:refs/heads/${var.github_branch}",
-        "repo:${var.github_repository}:pull_request",
+        var.github_oidc_pr_subject,
+        var.github_oidc_environment_subject,
       ]
     }
   }

@@ -377,3 +377,113 @@ Pull Request検証を開始する前に、作業ディレクトリが対象GitHu
 誤ったリポジトリへのpushや、無関係なファイルのcommitを防ぐため、feature branch作成、ファイル変更、push、Pull Request作成、GitHub Actions起動、AWS認証は実行していない。AWSリソース、Remote State、Terraform構成は変更していない。
 
 再開には、対象リポジトリへのアクセス権を持つGitHub認証と、対象リポジトリをこの作業ディレクトリへcloneするか、このディレクトリを対象リポジトリとして初期化する明示的な指定が必要である。
+
+### Pull Request Workflow 実動作確認（初回実行）
+
+対象GitHubアカウントの公開リポジトリを新規作成し、認証情報、State、環境固有のbackend設定、planファイルを除外した初回commitを`main`へpushした。次に、Terraformリソース定義を変更しないREADMEの1行更新だけを含むfeature branchを作成し、Pull Requestを作成した。
+
+最初のPRではworkflowの`paths`条件にREADMEが含まれず、checkが起動しなかった。要件どおりすべてのPull Requestで検証を行うため、この`paths`条件を削除した。Terraformリソース定義、AWS環境、Remote Stateには変更していない。
+
+更新後のPR workflowは起動した。`Format and validate` jobは成功し、`terraform fmt -check -recursive`、Rootおよびbootstrapの`terraform init -backend=false`、`terraform validate`が完了した。
+
+一方、trusted PR向けplan jobは、GitHub Actions VariableのAWSリージョン値が未設定のため、AWS認証Actionの入力検証で失敗した。この時点でOIDCによる一時Credentialの取得、S3 Remote Stateの読取り、lockfile利用、`terraform plan`は開始していない。IAM不足やOIDC Trust Policyの不一致ではないため、AWS権限は変更していない。
+
+再開時には、GitHub ActionsのRepository Variablesへ、リージョン、State Bucket、State Key、Terraform Role ARNに相当する4値を設定する必要がある。値そのもの、AWS Account ID、Role ARN、Bucket実名は公開ドキュメントへ記載しない。
+
+### Pull Request Workflow 実動作確認（Variables設定後）
+
+Repository Variablesへ必要な4値を登録した後、PRを更新して新しいworkflow runを起動した。`Format and validate`は再度成功した。trusted PR plan jobは`id-token: write`権限を用いてOIDCでRole引受を試みたが、`sts:AssumeRoleWithWebIdentity`が拒否されて失敗した。したがって、一時Credentialの発行、S3 Remote Stateの読取り、lockfile操作、Terraform planは実行されていない。
+
+原因をbootstrapの入力設定と照合したところ、IAM RoleのOIDC Trust Policyで許可しているGitHubリポジトリ識別子が、実際に作成・利用しているリポジトリ識別子と一致していなかった。これはIAM RoleのTrust Policy設定の問題であり、S3 IAM Policy、State Bucket、Terraform定義、GitHub Secretsの問題ではない。
+
+AWS権限は自動拡張していない。再開には、既存GitHub Actions Terraform RoleのTrust Policyにある`token.actions.githubusercontent.com:sub`条件を、実際のGitHub owner/repositoryのPR用subjectを許可する最小範囲へ修正する必要がある。fork PRへAWS権限を渡さない方針を維持するため、対象リポジトリ以外を許可するワイルドカード条件は使用しない。
+
+### OIDC Trust Policy 修正の事前検証（権限不足で停止）
+
+Trust PolicyのTerraform定義を、同一リポジトリからの`pull_request` subjectと、`terraform-production` Environment subjectだけを許可する内容へ更新した。`aud`は`sts.amazonaws.com`のままとし、OIDC Provider URL、GitHub Actions Roleの権限Policy、S3権限、その他のIAM権限は変更していない。`terraform fmt -check -recursive`およびbootstrapの`terraform validate`は成功した。
+
+bootstrap planは、State refresh時の権限不足で停止した。確認できた対象は次のとおり。
+
+- S3 State Bucketを読むための`HeadBucket` APIが403となった（対象Terraform resource: State Bucket）。S3の403は権限詳細を返さないため、この結果だけでは不足IAM Actionを断定しない。
+- `iam:GetOpenIDConnectProvider`が拒否された（対象Terraform resource: GitHub OIDC Provider）。
+
+このため、既存RoleのTrust Policyだけであることのplan確認、apply、post-apply plan、GitHub Actionsの再実行は行っていない。権限は自動追加していない。再開には、bootstrap refreshに必要な既存S3 State Bucket読取権限と、既存OIDC Provider読取権限を一時的に付与したIdentityでplanを成功させる必要がある。Account ID、Bucket名、Role ARN、Request IDは記録しない。
+
+### Bootstrap一時読取Policyの追加後
+
+AWS Consoleで、既存State Bucket、GitHub OIDC Provider、GitHub Actions Terraform Roleに限定した`BootstrapTemporaryPolicy`をIAM Userへ作成・付与した。削除権限、作成権限、`iam:PassRole`は含めていない。
+
+この状態でbootstrap planを再実行したところ、State Bucketの各種設定とOIDC Providerのrefreshは成功した。しかし、GitHub Actions Terraform Roleに設定されたinline policyの読取りで`iam:GetRolePolicy`が拒否された（対象Terraform resource: GitHub Actions Terraform Role）。
+
+指示どおり、`iam:GetRolePolicy`を自動追加せず、Trust Policyのapply、post-apply plan、GitHub Actions workflow再実行は行っていない。再開には、対象GitHub Actions Terraform Roleに限定した`iam:GetRolePolicy`を一時bootstrap policyへ追加する必要がある。実環境識別子は公開記録に残さない。
+
+### OIDC Trust Policyの反映と再試験
+
+対象GitHub Actions Terraform Roleに限定した一時bootstrap権限へ`iam:GetRolePolicy`が追加された後、bootstrap planを再実行した。planはGitHub Actions Terraform RoleのTrust Policyをin-placeで更新する変更だけであり、追加0件、削除0件だった。Role inline policyの権限内容およびResource範囲に変更はなかった。
+
+applyは既存RoleのTrust Policyだけを更新し、結果は追加0件、変更1件、削除0件だった。post-applyのbootstrap planは`No changes`となった。
+
+反映後に同一リポジトリ起点のPull Request workflowを再実行した。`Format and validate` jobは成功した。plan jobには必要最小限の`id-token: write`が設定されており、OIDCによる一時Credential取得を試行したが、`sts:AssumeRoleWithWebIdentity`が拒否された。そのためTerraform init、S3 Remote State読取り、lockfile操作、terraform planは実行されていない。
+
+AWS側の読み取り確認では、OIDC Provider URLはGitHub Actionsの正規endpoint、Audienceは`sts.amazonaws.com`、Trust Policyの許可subjectは対象リポジトリの`pull_request`および`terraform-production` Environment用に限定されていた。workflow permissionsも設定済みである。このため、次に確認すべき点は実行時にGitHubが発行したOIDC tokenの`sub` claimである。
+
+安全のため、raw JWTやCredentialをログ出力しない。再開する場合は、短時間だけ有効な診断stepで`sub`と`aud`だけを出力し、Trust Policyとの一致を確認する。確認後は診断stepを削除する。fork由来PRにはplan jobを実行しない既存条件を維持し、IAM権限の自動拡張やワイルドカードによるTrust Policy緩和は行わない。
+
+#### この時点の担当範囲
+
+- 人間: 一時bootstrap policyへの`iam:GetRolePolicy`追加、およびTrust Policy更新の実行許可。
+- AI: Terraform定義のTrust Policy修正、format/validate、plan差分の確認、Role更新、post-apply `No changes`確認、PR workflow再実行、失敗箇所の切り分け、匿名化した記録。
+
+### OIDC claimの一時診断結果
+
+Pull Request workflowだけに一時的な診断stepを追加した。stepはGitHub OIDC tokenを取得してrunner内でpayloadをdecodeしたが、JWT全文、header、signature、token本体、AWS Credential、Secret、`sub`および`aud`以外のclaimは出力していない。AWS AssumeRoleは診断stepでは実行していない。
+
+確認結果は次のとおりである（識別子は一般化）。
+
+- `aud`: `sts.amazonaws.com`
+- 実際の`sub`: `repo:<owner>@<repository-id>/<repository>:pull_request`
+- Trust Policyで許可していた`sub`: `repo:<owner>/<repository>:pull_request`
+
+`aud`は一致している。一方、GitHubが発行した`sub`にはリポジトリ名の後ろではなくownerとrepositoryの間にリポジトリIDを含むカスタムsubject形式が使用されていたため、Trust Policyの`sub`条件と一致せず、`sts:AssumeRoleWithWebIdentity`が拒否された。workflowの`id-token: write`とOIDC Provider URLは原因ではない。
+
+この時点でTrust Policy、Role権限、S3権限は変更していない。診断stepは確認後に削除する一時コードとしてfeature branchに残しており、次の修正を実施する前に削除する。次の作業では、確認済みの正確な`sub`形式にTrust Policyを最小範囲で合わせ、その後に診断stepを削除して再実行する。
+
+### custom subject対応後のPull Request workflow再実行
+
+確認済みのPull Request用custom `sub`をbootstrap入力へ追加し、Trust PolicyのPull Request subjectだけをin-placeで更新した。Environment用subject、OIDC Provider、Audience、GitHub Actions Role inline policy、S3権限は変更していない。一時診断stepは削除した。
+
+bootstrap planは既存GitHub Actions RoleのTrust Policy更新1件だけを示し、追加0件、削除0件だった。apply後のbootstrap planは`No changes`となった。
+
+Pull Request workflowの再実行では、次をすべて確認した。
+
+- `terraform fmt -check -recursive`、Root/Bootstrapのinitとvalidateが成功。
+- `id-token: write`を使用したGitHub OIDC Role引受が成功。
+- 長期AWS Access Key/Secret Access KeyをGitHub Secretsに保存せず、OIDCの一時Credentialで実行。
+- S3 Remote Backendの初期化とState読取りが成功。
+- `use_lockfile = true`を用いたTerraform planが完了。
+- plan結果は`No changes`。
+- Pull Request workflowにterraform applyは存在せず、fork PRを除外する条件も維持。
+
+この検証の完了後、Trust Policyは実際に検証したPull Request subjectだけを許可している。`terraform-production` Environment向けのcustom subjectは未検証であり、main mergeのapply workflowを有効にして検証する前に、Environment実行時の`sub`を同じ方法で確認する必要がある。
+
+### terraform-production Environment用OIDC subjectの事前確認
+
+mainへのpushでapply workflowを実行する前に、Pull Request workflowへ一時的なread-only診断jobを追加した。このjobは`terraform-production` Environmentを指定し、OIDC tokenのpayloadから`sub`と`aud`だけを出力した。AWS Role引受、Terraform backend初期化、State操作、terraform applyは実行していない。
+
+確認結果は次のとおりである（識別子は一般化）。
+
+- `aud`: `sts.amazonaws.com`
+- 実際のEnvironment `sub`: `repo:<owner>@<owner-id>/<repository>@<repository-id>:environment:terraform-production`
+- 現在Trust PolicyにあるEnvironment `sub`: `repo:<owner>/<repository>:environment:terraform-production`
+
+Audienceは一致しているが、Environment用subjectもPull Request用subjectと同様にcustom形式で発行されることを確認した。したがって、現時点でmain mergeのapply workflowを実行するとOIDC Role引受が拒否される。Trust Policy、Role inline policy、S3権限には変更を加えていない。
+
+一時診断jobは確認直後に削除した。次の作業では、確認済みEnvironment subjectをTrust Policyへ最小範囲で追加し、bootstrap planでRole Trust Policyだけの更新であることを確認してから適用する。
+
+### Environment subjectのTrust Policy反映
+
+確認済みの`terraform-production` Environment用custom subjectをbootstrap入力へ追加し、Trust PolicyのEnvironment subjectだけをin-placeで更新した。Pull Request用subject、OIDC Provider、Audience、Role inline policy、S3権限、アプリケーション用Terraformリソースには変更を加えていない。
+
+formatとbootstrap validateは成功した。bootstrap planは既存GitHub Actions Terraform RoleのTrust Policy変更1件だけを示し、追加0件、削除0件だった。apply結果も追加0件、変更1件、削除0件であり、post-apply bootstrap planは`No changes`となった。
+
+この時点で、Trust Policyは実行確認済みの同一リポジトリPull Request subjectと`terraform-production` Environment subjectを最小範囲で許可している。次の段階は、mainへのmergeでapply workflowを起動し、Environment OIDCによるRole引受、Remote Stateのlockfile、plan、およびNo changes時のapply完了を確認することである。
