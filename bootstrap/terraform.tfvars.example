@@ -3,4 +3,5 @@
 state_bucket_name = "replace-with-a-globally-unique-terraform-state-bucket"
 github_repository = "owner/repository"
 github_oidc_pr_subject = "repo:owner@owner-id/repository@repository-id:pull_request"
+github_oidc_environment_subject = "repo:owner@owner-id/repository@repository-id:environment:terraform-production"
 state_key         = "terraform/aws-validation.tfstate"

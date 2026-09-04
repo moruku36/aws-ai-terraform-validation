@@ -110,7 +110,7 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
       variable = "token.actions.githubusercontent.com:sub"
       values = [
         var.github_oidc_pr_subject,
-        "repo:${var.github_repository}:environment:terraform-production",
+        var.github_oidc_environment_subject,
       ]
     }
   }

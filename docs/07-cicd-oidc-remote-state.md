@@ -479,3 +479,11 @@ mainへのpushでapply workflowを実行する前に、Pull Request workflowへ�
 Audienceは一致しているが、Environment用subjectもPull Request用subjectと同様にcustom形式で発行されることを確認した。したがって、現時点でmain mergeのapply workflowを実行するとOIDC Role引受が拒否される。Trust Policy、Role inline policy、S3権限には変更を加えていない。
 
 一時診断jobは確認直後に削除した。次の作業では、確認済みEnvironment subjectをTrust Policyへ最小範囲で追加し、bootstrap planでRole Trust Policyだけの更新であることを確認してから適用する。
+
+### Environment subjectのTrust Policy反映
+
+確認済みの`terraform-production` Environment用custom subjectをbootstrap入力へ追加し、Trust PolicyのEnvironment subjectだけをin-placeで更新した。Pull Request用subject、OIDC Provider、Audience、Role inline policy、S3権限、アプリケーション用Terraformリソースには変更を加えていない。
+
+formatとbootstrap validateは成功した。bootstrap planは既存GitHub Actions Terraform RoleのTrust Policy変更1件だけを示し、追加0件、削除0件だった。apply結果も追加0件、変更1件、削除0件であり、post-apply bootstrap planは`No changes`となった。
+
+この時点で、Trust Policyは実行確認済みの同一リポジトリPull Request subjectと`terraform-production` Environment subjectを最小範囲で許可している。次の段階は、mainへのmergeでapply workflowを起動し、Environment OIDCによるRole引受、Remote Stateのlockfile、plan、およびNo changes時のapply完了を確認することである。
