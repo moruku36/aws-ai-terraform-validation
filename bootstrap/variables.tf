@@ -36,6 +36,16 @@ variable "github_repository" {
   }
 }
 
+variable "github_oidc_pr_subject" {
+  description = "Exact GitHub OIDC sub claim permitted for trusted pull requests."
+  type        = string
+
+  validation {
+    condition     = can(regex("^repo:[^:]+:pull_request$", var.github_oidc_pr_subject))
+    error_message = "github_oidc_pr_subject must be an exact pull_request OIDC subject."
+  }
+}
+
 variable "github_branch" {
   description = "Protected branch permitted to apply Terraform."
   type        = string

@@ -2,4 +2,5 @@
 # These are identifiers, not credentials. Do not put AWS access keys here.
 state_bucket_name = "replace-with-a-globally-unique-terraform-state-bucket"
 github_repository = "owner/repository"
+github_oidc_pr_subject = "repo:owner@owner-id/repository@repository-id:pull_request"
 state_key         = "terraform/aws-validation.tfstate"
