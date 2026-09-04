@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars and replace both required values before applying.
+# These are identifiers, not credentials. Do not put AWS access keys here.
+state_bucket_name = "replace-with-a-globally-unique-terraform-state-bucket"
+github_repository = "owner/repository"
+state_key         = "terraform/aws-validation.tfstate"

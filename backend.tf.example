@@ -1,0 +1,8 @@
+# Copy this file to backend.tf only when the bootstrap stack has created the
+# bucket. Keep backend values out of source control; pass them with
+# -backend-config or a local backend.hcl file.
+terraform {
+  backend "s3" {
+    use_lockfile = true
+  }
+}

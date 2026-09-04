@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars only when you need to override defaults.
+# Do not put AWS credentials in this file.
+project_name = "ai-terraform-validation"
+environment  = "dev"
+
+# Use two AZs that are enabled in your account.
+availability_zones = ["ap-northeast-1a", "ap-northeast-1c"]
+
+# Leave null to select the latest official Amazon Linux 2023 AMI.
+ami_id = null
