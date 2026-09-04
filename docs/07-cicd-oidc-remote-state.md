@@ -377,3 +377,15 @@ Pull Request検証を開始する前に、作業ディレクトリが対象GitHu
 誤ったリポジトリへのpushや、無関係なファイルのcommitを防ぐため、feature branch作成、ファイル変更、push、Pull Request作成、GitHub Actions起動、AWS認証は実行していない。AWSリソース、Remote State、Terraform構成は変更していない。
 
 再開には、対象リポジトリへのアクセス権を持つGitHub認証と、対象リポジトリをこの作業ディレクトリへcloneするか、このディレクトリを対象リポジトリとして初期化する明示的な指定が必要である。
+
+### Pull Request Workflow 実動作確認（初回実行）
+
+対象GitHubアカウントの公開リポジトリを新規作成し、認証情報、State、環境固有のbackend設定、planファイルを除外した初回commitを`main`へpushした。次に、Terraformリソース定義を変更しないREADMEの1行更新だけを含むfeature branchを作成し、Pull Requestを作成した。
+
+最初のPRではworkflowの`paths`条件にREADMEが含まれず、checkが起動しなかった。要件どおりすべてのPull Requestで検証を行うため、この`paths`条件を削除した。Terraformリソース定義、AWS環境、Remote Stateには変更していない。
+
+更新後のPR workflowは起動した。`Format and validate` jobは成功し、`terraform fmt -check -recursive`、Rootおよびbootstrapの`terraform init -backend=false`、`terraform validate`が完了した。
+
+一方、trusted PR向けplan jobは、GitHub Actions VariableのAWSリージョン値が未設定のため、AWS認証Actionの入力検証で失敗した。この時点でOIDCによる一時Credentialの取得、S3 Remote Stateの読取り、lockfile利用、`terraform plan`は開始していない。IAM不足やOIDC Trust Policyの不一致ではないため、AWS権限は変更していない。
+
+再開時には、GitHub ActionsのRepository Variablesへ、リージョン、State Bucket、State Key、Terraform Role ARNに相当する4値を設定する必要がある。値そのもの、AWS Account ID、Role ARN、Bucket実名は公開ドキュメントへ記載しない。
