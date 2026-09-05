@@ -3,7 +3,8 @@ locals {
 }
 
 resource "aws_s3_bucket" "alb_access_logs" {
-  bucket = local.monitoring_access_logs_bucket_name
+  bucket        = local.monitoring_access_logs_bucket_name
+  force_destroy = true
 
   tags = {
     Name = "${local.name_prefix}-alb-access-logs"
