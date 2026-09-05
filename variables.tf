@@ -132,3 +132,15 @@ variable "monitoring_cpu_threshold" {
   type        = number
   default     = 80
 }
+
+variable "monitoring_status_check_period_seconds" {
+  description = "CloudWatch evaluation period for EC2 status check alarms."
+  type        = number
+  default     = 60
+}
+
+variable "monitoring_status_check_evaluation_periods" {
+  description = "Consecutive failed or missing EC2 status check periods required to enter ALARM."
+  type        = number
+  default     = 2
+}

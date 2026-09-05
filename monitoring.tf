@@ -203,3 +203,22 @@ resource "aws_cloudwatch_metric_alarm" "ec2_cpu_high" {
     InstanceId = each.value.id
   }
 }
+
+resource "aws_cloudwatch_metric_alarm" "ec2_status_check_failed" {
+  for_each = aws_instance.web
+
+  alarm_name          = "${local.name_prefix}-status-check-failed-${each.key}"
+  alarm_description   = "EC2 instance or system status checks failed, or the instance stopped reporting status checks."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = var.monitoring_status_check_evaluation_periods
+  metric_name         = "StatusCheckFailed"
+  namespace           = "AWS/EC2"
+  period              = var.monitoring_status_check_period_seconds
+  statistic           = "Maximum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    InstanceId = each.value.id
+  }
+}
