@@ -2,7 +2,7 @@
 
 ## 検証目的
 
-AI/Codex にどこまでAWSインフラ実装を任せられるかを検証する、最小構成かつ破棄可能なTerraform環境です。現在はネットワーク、ALB、Private EC2、Nginxの構築と疎通確認まで完了しています。
+AI/Codex にどこまでAWSインフラ実装を任せられるかを検証する、最小構成かつ破棄可能なTerraform環境です。ネットワーク、ALB、Private EC2、Nginxの構築と疎通確認に加え、GitHub ActionsのOIDC認証を用いるTerraform CI/CDの実動作確認まで完了しています。
 
 今後は同じリポジトリを基に、TerraformのCI/CD、GitHub ActionsからAWSへのOIDC認証、監視を段階的に検証します。
 
@@ -11,8 +11,9 @@ AI/Codex にどこまでAWSインフラ実装を任せられるかを検証す�
 - AWS東京リージョンにVPC、Public / Private Subnet各2つ、ALB、Private EC2 2台を構築済み
 - EC2にPublic IPおよびSSH公開はなく、外部公開はALBのHTTPのみ
 - ALB経由でNginxのHTTP 200を確認済み
-- 最終 `terraform plan` は `No changes`
-- Pull RequestではTerraform定義を変更せず、CI/CD workflowの検証を段階的に実施する
+- Local / Remote Stateとも最終 `terraform plan` は `No changes`
+- Pull Requestではformat / validate / OIDC認証 / Remote Stateを用いたread-only planを実行済み
+- main mergeでは`terraform-production` Environment経由のOIDC認証、plan、applyを実行済み（AWSリソース変更0件）
 
 > このリポジトリには認証情報、Terraform state、実環境のリソースIDやIPアドレスを含めません。
 
@@ -46,3 +47,4 @@ terraform destroy
 - [検証結果](docs/05-results.md)
 - [学びと次の段階](docs/06-lessons-learned.md)
 - [CI/CD・OIDC・Remote State](docs/07-cicd-oidc-remote-state.md)
+- [Antigravity向け引継ぎ](docs/08-antigravity-handoff.md)
