@@ -168,7 +168,10 @@ resource "aws_lb" "this" {
   security_groups    = [aws_security_group.alb.id]
   subnets            = values(aws_subnet.public)[*].id
 
-  tags = { Name = "${local.name_prefix}-alb" }
+  tags = {
+    Name               = "${local.name_prefix}-alb"
+    ValidationScenario = "cicd-real-apply"
+  }
 }
 
 resource "aws_lb_target_group" "web" {
