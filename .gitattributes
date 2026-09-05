@@ -1,0 +1,5 @@
+# Terraform heredocs can be sensitive to line endings (for example EC2 user_data).
+# Keep Terraform source files LF-normalized on every platform.
+*.tf text eol=lf
+*.tfvars text eol=lf
+*.tfvars.example text eol=lf

@@ -497,3 +497,13 @@ workflowでは、GitHub OIDCによる一時CredentialでRole引受に成功し�
 planは`No changes`で完了した。その確定planを引数としてterraform applyを実行し、結果は追加0件、変更0件、削除0件だった。既存AWS環境のdestroy、recreate、意図しない変更は発生していない。
 
 この確認により、同一リポジトリのPull Requestではread-only plan、main mergeでは`terraform-production` Environmentを介したOIDC認証・plan・applyというCI/CDフローが実動作することを確認した。
+
+### 実変更apply検証とWindows改行コードの再現性対策
+
+CI/CDの実変更を確認するため、既存ALBへ検証用タグを1件追加するだけのPull Requestを作成した。PR workflowはformat、validate、OIDC Role引受、Remote State planに成功し、plan差分は既存ALBのin-place tag更新1件だけ（追加0件、削除0件、置換なし）だった。
+
+main merge後のapply workflowは、OIDC認証、S3 backend、lockfileを使うplan、保存済みplanのapplyに成功した。apply結果は追加0件、変更1件、削除0件であり、更新内容は検証用タグだけだった。
+
+post-apply確認の初回ローカルplanでは、EC2の`user_data`ハッシュ差によりEC2 2台とTarget Group登録の置換が表示された。この差分にはapplyを実行していない。原因を調査したところ、Windowsの`core.autocrlf=true`と`.gitattributes`未設定により、Terraform heredocを含む`.tf`ファイルがCRLFへ変換されていた。AWS上のdriftではなかった。
+
+再発防止として`.gitattributes`で`*.tf`、`*.tfvars`、`*.tfvars.example`をLF固定とした。Terraform sourceをLFへ正規化して再度Remote State planを実行した結果、`No changes`を確認した。生成したroot planファイルはGit管理対象外とした。
