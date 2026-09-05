@@ -172,6 +172,7 @@ data "aws_iam_policy_document" "github_actions_terraform" {
     effect = "Allow"
     actions = [
       "s3:ListBucket",
+      "s3:ListBucketVersions",
       "s3:GetBucketLocation",
       "s3:GetBucketPolicy",
       "s3:GetBucketAcl",
@@ -190,6 +191,16 @@ data "aws_iam_policy_document" "github_actions_terraform" {
       "s3:GetBucketOwnershipControls",
     ]
     resources = ["arn:aws:s3:::${local.monitoring_access_logs_bucket_name}"]
+  }
+
+  statement {
+    sid    = "DeleteMonitoringLogObjects"
+    effect = "Allow"
+    actions = [
+      "s3:DeleteObject",
+      "s3:DeleteObjectVersion",
+    ]
+    resources = ["arn:aws:s3:::${local.monitoring_access_logs_bucket_name}/*"]
   }
 
   statement {
