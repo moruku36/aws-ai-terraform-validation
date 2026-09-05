@@ -6,7 +6,9 @@ crash.*.log
 terraform.tfvars
 *.tfplan
 /tfplan
+/tfplan-*
 bootstrap/tfplan
+/bootstrap/tfplan-*
 work/
 backend.tf
 backend.hcl

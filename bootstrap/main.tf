@@ -7,6 +7,13 @@ locals {
   github_oidc_provider_arn = var.github_oidc_provider_arn != null ? var.github_oidc_provider_arn : aws_iam_openid_connect_provider.github_actions[0].arn
 }
 
+data "aws_caller_identity" "current" {}
+
+locals {
+  monitoring_access_logs_bucket_name = lower("${var.project_name}-${var.environment}-alb-logs-${data.aws_caller_identity.current.account_id}")
+  monitoring_alarm_arn_pattern       = "arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:${var.project_name}-${var.environment}-*"
+}
+
 resource "aws_s3_bucket" "terraform_state" {
   bucket = var.state_bucket_name
 
@@ -158,6 +165,73 @@ data "aws_iam_policy_document" "github_actions_terraform" {
       "s3:DeleteObject",
     ]
     resources = ["${aws_s3_bucket.terraform_state.arn}/${var.state_key}.tflock"]
+  }
+
+  statement {
+    sid    = "ReadMonitoringLogBucket"
+    effect = "Allow"
+    actions = [
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:GetBucketPolicy",
+      "s3:GetBucketAcl",
+      "s3:GetBucketCORS",
+      "s3:GetBucketWebsite",
+      "s3:GetBucketVersioning",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetBucketRequestPayment",
+      "s3:GetBucketLogging",
+      "s3:GetLifecycleConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:GetEncryptionConfiguration",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetBucketTagging",
+      "s3:GetBucketPublicAccessBlock",
+      "s3:GetBucketOwnershipControls",
+    ]
+    resources = ["arn:aws:s3:::${local.monitoring_access_logs_bucket_name}"]
+  }
+
+  statement {
+    sid    = "ManageMonitoringLogBucket"
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:PutBucketPolicy",
+      "s3:DeleteBucketPolicy",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:DeleteBucketPublicAccessBlock",
+      "s3:PutBucketOwnershipControls",
+      "s3:DeleteBucketOwnershipControls",
+      "s3:PutEncryptionConfiguration",
+      "s3:DeleteEncryptionConfiguration",
+      "s3:PutLifecycleConfiguration",
+      "s3:DeleteLifecycleConfiguration",
+      "s3:PutBucketTagging",
+      "s3:DeleteBucketTagging",
+    ]
+    resources = ["arn:aws:s3:::${local.monitoring_access_logs_bucket_name}"]
+  }
+
+  statement {
+    sid       = "DescribeMonitoringAlarms"
+    effect    = "Allow"
+    actions   = ["cloudwatch:DescribeAlarms"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ManageMonitoringAlarms"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutMetricAlarm",
+      "cloudwatch:DeleteAlarms",
+      "cloudwatch:ListTagsForResource",
+      "cloudwatch:TagResource",
+      "cloudwatch:UntagResource",
+    ]
+    resources = [local.monitoring_alarm_arn_pattern]
   }
 
   statement {

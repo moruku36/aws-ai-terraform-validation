@@ -47,4 +47,5 @@ terraform destroy
 - [検証結果](docs/05-results.md)
 - [学びと次の段階](docs/06-lessons-learned.md)
 - [CI/CD・OIDC・Remote State](docs/07-cicd-oidc-remote-state.md)
+- [監視設計・実装状況](docs/08-monitoring.md)
 - [Antigravity向け引継ぎ](docs/08-antigravity-handoff.md)

@@ -73,3 +73,62 @@ variable "create_amazonlinux_s3_endpoint" {
   type        = bool
   default     = true
 }
+
+variable "monitoring_access_log_prefix" {
+  description = "S3 prefix used for Application Load Balancer access logs."
+  type        = string
+  default     = "access-logs"
+}
+
+variable "monitoring_log_retention_days" {
+  description = "Number of days to retain Application Load Balancer access logs."
+  type        = number
+  default     = 14
+
+  validation {
+    condition     = var.monitoring_log_retention_days >= 1
+    error_message = "monitoring_log_retention_days must be at least 1."
+  }
+}
+
+variable "monitoring_target_period_seconds" {
+  description = "CloudWatch evaluation period for target health alarms."
+  type        = number
+  default     = 60
+}
+
+variable "monitoring_target_evaluation_periods" {
+  description = "Consecutive target health periods required to enter ALARM."
+  type        = number
+  default     = 2
+}
+
+variable "monitoring_5xx_period_seconds" {
+  description = "CloudWatch evaluation period for the combined HTTP 5xx alarm."
+  type        = number
+  default     = 300
+}
+
+variable "monitoring_5xx_threshold" {
+  description = "Combined ALB and target HTTP 5xx count that enters ALARM."
+  type        = number
+  default     = 5
+}
+
+variable "monitoring_cpu_period_seconds" {
+  description = "CloudWatch evaluation period for EC2 CPU alarms."
+  type        = number
+  default     = 300
+}
+
+variable "monitoring_cpu_evaluation_periods" {
+  description = "Consecutive CPU periods required to enter ALARM."
+  type        = number
+  default     = 3
+}
+
+variable "monitoring_cpu_threshold" {
+  description = "Average EC2 CPU utilization percentage that enters ALARM."
+  type        = number
+  default     = 80
+}
