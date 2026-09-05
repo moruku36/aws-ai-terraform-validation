@@ -56,6 +56,12 @@ variable "github_oidc_environment_subject" {
   }
 }
 
+variable "environment" {
+  description = "Environment name used to scope monitoring resource permissions."
+  type        = string
+  default     = "dev"
+}
+
 variable "github_branch" {
   description = "Protected branch permitted to apply Terraform."
   type        = string

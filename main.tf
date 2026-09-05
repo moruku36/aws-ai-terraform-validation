@@ -15,6 +15,8 @@ locals {
   resolved_ami_id = var.ami_id != null ? var.ami_id : data.aws_ami.amazon_linux_2023[0].id
 }
 
+data "aws_caller_identity" "current" {}
+
 data "aws_ami" "amazon_linux_2023" {
   count       = var.ami_id == null ? 1 : 0
   most_recent = true
@@ -172,6 +174,14 @@ resource "aws_lb" "this" {
     Name               = "${local.name_prefix}-alb"
     ValidationScenario = "cicd-real-apply"
   }
+
+  access_logs {
+    bucket  = aws_s3_bucket.alb_access_logs.bucket
+    prefix  = var.monitoring_access_log_prefix
+    enabled = true
+  }
+
+  depends_on = [aws_s3_bucket_policy.alb_access_logs]
 }
 
 resource "aws_lb_target_group" "web" {
