@@ -55,6 +55,8 @@ GitHub Actions Roleの監視権限を反映するbootstrap applyは完了した�
 
 監視変更のPull Requestでは、format、init、validate、GitHub OIDC認証、S3 Remote Stateを利用したplanがすべて成功した。PR planは11追加、1変更、0削除で、applyは実行されていない。mainへのmerge後にapply workflowが起動し、同じ差分を11追加、1変更、0削除で適用した。再実行したmain workflowではplanが`No changes`、applyが0追加、0変更、0削除となり、Remote Stateと実環境の整合性を確認した。長期AWS Access KeyはGitHub Secretsで使用していない。
 
+障害試験で判明したEC2停止検知ギャップの修正Pull Requestでも、同じOIDC認証とRemote Stateを使用したplanが成功した。差分はEC2 Status Checkアラーム2件の追加だけで、0変更、0削除、既存リソースの置換なしだった。main workflowは2追加、0変更、0削除で適用に成功し、再実行時のplanは`No changes`、applyは0追加、0変更、0削除となった。
+
 障害試験は、監視自体の適用と整合性確認が完了した後の別工程とし、サービス影響を伴う操作の承認前には実行していない。
 
 ## 発生したエラーと修正方針
@@ -85,7 +87,7 @@ bootstrap planは、既存GitHub Actions Terraform Roleのinline policyをin-pla
 
 最初にEC2を1台だけ一時停止した。ALBは残る1台でHTTP 200を維持したが、停止したTargetは`unhealthy`ではなく`unused`として扱われ、`UnHealthyHostCount`アラームは発報しなかった。EC2を直ちに再起動し、port 80のTarget 2台がともに`healthy`へ戻ったことを確認した。この結果から、停止インスタンス検知にはEC2 StatusCheckまたは別のアラームが必要であり、ALBの`UnHealthyHostCount`だけでは停止状態を直接検知できない場合があると分かった。
 
-この検知ギャップへの修正として、各EC2の`StatusCheckFailed`アラームを追加した。1分間隔で2回連続の失敗、または停止に伴うメトリクス欠損を異常として扱う。ALBのTarget異常とEC2自体の停止・Status Check異常を分けて検知できる構成とした。
+この検知ギャップへの修正として、各EC2の`StatusCheckFailed`アラームを追加した。1分間隔で2回連続の失敗、または停止に伴うメトリクス欠損を異常として扱う。ALBのTarget異常とEC2自体の停止・Status Check異常を分けて検知できる構成とした。追加後のGitHub Actions applyと最終`No changes`確認も完了している。
 
 次に、既存のport 80 Target 2台には触れず、同じEC2の未使用port 81を試験用Targetとして一時登録した。health check timeoutにより試験Targetが`unhealthy`となり、`UnHealthyHostCount`が2評価期間連続でしきい値以上になった後、バックエンド異常アラームが`ALARM`へ遷移した。試験中も通常Target 2台は`healthy`で、ALBはHTTP 200を維持した。
 
