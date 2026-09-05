@@ -50,7 +50,11 @@ Rootのlocal plan結果は **11追加、1変更、0削除** だった。追加�
 
 ## GitHub Actions・適用状況
 
-GitHub Actions Roleの監視権限を反映するbootstrap applyは完了した。適用内容は既存Role inline policyのin-place更新1件のみで、0追加、1変更、0削除だった。適用後のbootstrap planは`No changes`となった。PR workflow、main merge、Root apply、障害試験は後続工程として実施する。
+GitHub Actions Roleの監視権限を反映するbootstrap applyは完了した。適用内容は既存Role inline policyのin-place更新1件のみで、0追加、1変更、0削除だった。適用後のbootstrap planは`No changes`となった。
+
+監視変更のPull Requestでは、format、init、validate、GitHub OIDC認証、S3 Remote Stateを利用したplanがすべて成功した。PR planは11追加、1変更、0削除で、applyは実行されていない。mainへのmerge後にapply workflowが起動し、同じ差分を11追加、1変更、0削除で適用した。再実行したmain workflowではplanが`No changes`、applyが0追加、0変更、0削除となり、Remote Stateと実環境の整合性を確認した。長期AWS Access KeyはGitHub Secretsで使用していない。
+
+障害試験は、監視自体の適用と整合性確認が完了した後の別工程とし、サービス影響を伴う操作の承認前には実行していない。
 
 ## 発生したエラーと修正方針
 
@@ -68,6 +72,12 @@ bootstrap planは、既存GitHub Actions Terraform Roleのinline policyをin-pla
 
 過去に利用したローカルCredential CSVは見つからなかった。既存のローカルAWS認証設定で読み取りplanは成功したため、Credentialの表示・保存・再作成はしていない。
 
+### 適用後ローカルplanのS3 AccessDenied
+
+監視適用後のローカルplanでは、実行IAM Userに新規ALBログバケットの`S3:ListBucket`権限がなく、`aws_s3_bucket.alb_access_logs`のrefreshで停止した。既存AWSリソースへの変更やapplyは発生していない。
+
+確認専用のread-only inline policyを追加しようとしたが、IAM Userに設定できるinline policyの合計サイズ上限に達したため保存できなかった。既存ポリシーの削除・置換や権限拡張は行わず、作成画面をキャンセルした。代わりに、監視リソースへの必要最小限の読取権限を既に持つGitHub OIDC Roleでmain workflowを再実行し、planの`No changes`とapplyの0変更を確認した。
+
 ## 障害試験方針
 
 監視リソースのapply後にのみ、次の低リスクな試験を検討する。
@@ -80,5 +90,5 @@ ALB/EC2の停止、Security Group変更、SSH公開、Public IP付与は本試�
 
 ## 人間とAIの担当
 
-- **人間が介入した箇所**: AWS Console上の一時権限更新に対する明示承認。今後はPR merge、Root apply、障害試験の最終承認、通知先の決定が該当する。
-- **AIが自律的に実施済み**: 監視設計、コスト比較、Terraform実装、format/validate、Root plan、bootstrap plan、既存リソース置換の有無確認、権限不足の特定、AWS Consoleでの対象限定権限設定、bootstrap apply、適用後の`No changes`確認、匿名化した記録。
+- **人間が介入した箇所**: AWS Console上の一時権限更新、Pull Requestのmerge、main apply開始に対する明示承認。今後は障害試験の最終承認と通知先の決定が該当する。
+- **AIが自律的に実施済み**: 監視設計、コスト比較、Terraform実装、format/validate、Root plan、bootstrap plan、既存リソース置換の有無確認、権限不足の特定、AWS Consoleでの対象限定権限設定、bootstrap apply、Pull Request作成とCI確認、main workflow監視、適用後の`No changes`確認、IAM上限エラー時の安全な代替検証、匿名化した記録。
