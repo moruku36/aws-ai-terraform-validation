@@ -27,23 +27,45 @@ AWS IAM Service Authorization Referenceでは、`iam:CreateOpenIDConnectProvider
 
 この一時policyはbootstrap完了後に削除する。将来のcleanupでbootstrapリソースを削除する場合は、削除APIだけを別の一時policyとして発行し、通常運用の権限に混在させない。
 
-## OIDC認証フロー
+## OIDC認証・CI/CDパイプラインフロー
 
 ```mermaid
 sequenceDiagram
-    participant GH as GitHub Actions
-    participant OIDC as GitHub OIDC token service
+    autonumber
+    actor Dev as Developer
+    participant GH as GitHub Actions Runner
+    participant OIDC as GitHub OIDC Provider
     participant STS as AWS STS
-    participant Role as IAM Terraform role
-    participant AWS as AWS APIs and State backend
+    participant IAM as AWS IAM Role
+    participant S3State as S3 Remote State Bucket
+    participant Infra as AWS VPC / ALB / EC2
 
-    GH->>OIDC: ID tokenを要求 (id-token: write)
-    OIDC-->>GH: 短期JWT
-    GH->>STS: AssumeRoleWithWebIdentity
-    STS->>Role: audience / subjectを検証
-    Role-->>STS: 一時Credentialを発行
-    STS-->>GH: 短期Credential
-    GH->>AWS: Stateのlock、plan、mainのみapply
+    Note over Dev,GH: PR 作成時 (terraform-pr.yml)
+    Dev->>GH: Pull Request オープン
+    GH->>OIDC: ID Token (JWT) 要求 (id-token: write)
+    OIDC-->>GH: 署名付き JWT (sub: repo:owner/repo:pull_request)
+    GH->>STS: AssumeRoleWithWebIdentity (JWT)
+    STS->>IAM: Trust Policy 検証 (Audience & Subject)
+    IAM-->>STS: 一時認証情報発行 (Read-only権限)
+    STS-->>GH: STS Temporary Credentials (1時間有効)
+    GH->>S3State: tfstate 取得 (use_lockfile = true / ロック取得)
+    GH->>Infra: Read-only API呼び出し (terraform plan)
+    GH->>S3State: ロック解放 (.tflock 削除)
+    GH-->>Dev: PRコメントに Plan 結果を表示
+
+    Note over Dev,GH: main マージ時 (terraform-apply.yml)
+    Dev->>GH: main ブランチへマージ
+    GH->>OIDC: ID Token 要求 (Environment: terraform-production)
+    OIDC-->>GH: 署名付き JWT (sub: repo:owner/repo:ref:refs/heads/main)
+    GH->>STS: AssumeRoleWithWebIdentity (JWT)
+    STS->>IAM: Trust Policy 検証 (Audience & Subject)
+    IAM-->>STS: 一時認証情報発行 (Apply権限)
+    STS-->>GH: STS Temporary Credentials
+    GH->>S3State: 排他ロック取得 (<state>.tflock 作成)
+    GH->>Infra: terraform apply (リソース作成・更新)
+    GH->>S3State: 新しい tfstate アップロード
+    GH->>S3State: 排他ロック解放 (.tflock 削除)
+    GH-->>Dev: Apply 完了通知
 ```
 
 長期Access KeyとSecret Access KeyをGitHub Secretsに保存しない。GitHub Actionsの`configure-aws-credentials`がOIDCトークンをSTSへ交換し、ジョブ中だけ有効なCredentialを受け取る。

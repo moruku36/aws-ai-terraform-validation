@@ -16,6 +16,46 @@ CloudWatch Agent、CloudWatch Logs、NAT Gateway、EC2への追加IAM Role、SNS
 
 ## 監視項目とアラーム条件
 
+```mermaid
+flowchart LR
+    subgraph Targets["監視データソース"]
+        ALB["Application Load Balancer"]
+        TG["Target Group (EC2 x2)"]
+        EC2["EC2 Instances (Web#1 / Web#2)"]
+    end
+
+    subgraph Metrics["CloudWatch メトリクス"]
+        M1["HealthyHostCount"]
+        M2["UnHealthyHostCount"]
+        M3["HTTPCode_Target_5XX_Count<br/>+ HTTPCode_ELB_5XX_Count"]
+        M4["CPUUtilization (per EC2)"]
+        M5["StatusCheckFailed (per EC2)"]
+    end
+
+    subgraph Alarms["CloudWatch アラーム (計7件)"]
+        A1["Webサービス停止アラーム<br/>(1未満 x 2回)"]
+        A2["バックエンド異常アラーム<br/>(1以上 x 2回)"]
+        A3["HTTP 5xx急増アラーム<br/>(合計5件以上 / 5分)"]
+        A4["CPU高負荷アラーム x2<br/>(>80% x 3回)"]
+        A5["StatusCheck異常アラーム x2<br/>(>=1 または 欠損 x 2回)"]
+    end
+
+    subgraph Logs["ログストレージ"]
+        S3Log["S3 Access Logs Bucket<br/>(14日間ライフサイクル)"]
+    end
+
+    TG --> M1 & M2
+    ALB --> M3
+    EC2 --> M4 & M5
+    ALB -.->|"アクセスログ"| S3Log
+
+    M1 --> A1
+    M2 --> A2
+    M3 --> A3
+    M4 --> A4
+    M5 --> A5
+```
+
 | 目的 | CloudWatch metric | 条件 | 判定理由 |
 | --- | --- | --- | --- |
 | Webサービス停止 | `HealthyHostCount` | 1未満、1分×2回 | 全Targetが利用不能となり、ALB経由のWeb提供ができない状態を検知する。 |
@@ -82,6 +122,42 @@ bootstrap planは、既存GitHub Actions Terraform Roleのinline policyをin-pla
 確認専用のread-only inline policyを追加しようとしたが、IAM Userに設定できるinline policyの合計サイズ上限に達したため保存できなかった。既存ポリシーの削除・置換や権限拡張は行わず、作成画面をキャンセルした。代わりに、監視リソースへの必要最小限の読取権限を既に持つGitHub OIDC Roleでmain workflowを再実行し、planの`No changes`とapplyの0変更を確認した。
 
 ## 障害試験結果
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Tester as 検証者 (AI/Human)
+    participant ALB as Application Load Balancer
+    participant EC2A as EC2 Web #1 (Target A)
+    participant EC2B as EC2 Web #2 (Target B)
+    participant CW as CloudWatch (StatusCheck / Unhealthy)
+    actor Client as 外部クライアント (curl)
+
+    Note over EC2A,EC2B: 正常運用フェーズ (両系稼働)
+    Client->>ALB: HTTP GET /
+    ALB->>EC2A: 正常ルーティング
+    ALB-->>Client: HTTP 200 OK (Traffic distributed)
+
+    Note over Tester,EC2A: 障害注入 (EC2 Web #1 を意図的停止)
+    Tester->>EC2A: ec2 stop-instances
+    EC2A-->>EC2A: インスタンス停止
+    EC2A-.->|メトリクス欠損/StatusCheck 失敗| CW
+    CW-->>CW: StatusCheckFailed アラーム発報 (ALARM)
+    ALB-->>ALB: Target A を未稼働(unused)として除外
+
+    Note over Client,ALB: サービス継続性確認
+    Client->>ALB: HTTP GET /
+    ALB->>EC2B: 健全な Target B に自動集約
+    ALB-->>Client: HTTP 200 OK (無停止継続)
+
+    Note over Tester,EC2A: 復旧フェーズ (EC2 再起動)
+    Tester->>EC2A: ec2 start-instances
+    EC2A-->>EC2A: Nginx 起動 & 初期化完了
+    ALB->>EC2A: Health Check (HTTP :80)
+    EC2A-->>ALB: 200 OK
+    ALB-->>ALB: Target A を healthy へ復帰
+    CW-->>CW: StatusCheckFailed アラーム解消 (OK)
+```
 
 人間の明示承認後、正常なport 80 Targetを残した状態でバックエンド異常検知を試験した。
 

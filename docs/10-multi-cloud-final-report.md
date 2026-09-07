@@ -32,6 +32,73 @@
 
 ## 3. アーキテクチャ・実装比較
 
+### 3クラウドのアーキテクチャパターン比較
+
+```mermaid
+flowchart TB
+    subgraph Client["外部クライアント"]
+        User((Web User))
+    end
+
+    subgraph AWS["1. AWS (個別EC2 & AZ分割Subnet)"]
+        ALB["ALB (Public Subnets)"]
+        EC2_1["EC2 #1 (AZ-1a)"]
+        EC2_2["EC2 #2 (AZ-1c)"]
+        S3EP["S3 Gateway Endpoint<br/>(Package取得)"]
+        ALB --> EC2_1 & EC2_2
+        EC2_1 & EC2_2 --> S3EP
+    end
+
+    subgraph Azure["2. Azure (専用Subnet AppGW & Zone指定VM)"]
+        AppGW["App Gateway (専用Subnet)"]
+        VM_1["Linux VM (Zone 1)"]
+        VM_2["Linux VM (Zone 2)"]
+        NATGW["NAT Gateway<br/>(Package取得)"]
+        AppGW --> VM_1 & VM_2
+        VM_1 & VM_2 --> NATGW
+    end
+
+    subgraph GCP["3. GCP (Global ALB & Regional MIG)"]
+        GALB["Global External ALB"]
+        MIG["Regional MIG (EVEN Zone分散)"]
+        CNAT["Cloud Router + Cloud NAT<br/>(Package取得)"]
+        GALB --> MIG
+        MIG --> CNAT
+    end
+
+    User -->|"HTTP :80"| ALB
+    User -->|"HTTP :80"| AppGW
+    User -->|"HTTP :80"| GALB
+```
+
+### OIDC認証・Remote State排他制御方式の比較
+
+```mermaid
+flowchart LR
+    subgraph GH["GitHub Actions"]
+        JWT["OIDC Token (JWT)"]
+    end
+
+    subgraph AWS_ID["AWS STS & S3"]
+        STS["STS AssumeRole"] --> Role["IAM Terraform Role"]
+        Role --> S3["S3 Remote State<br/>(use_lockfile = true)"]
+    end
+
+    subgraph Azure_ID["Microsoft Entra ID & Blob"]
+        Entra["Entra Federated Identity"] --> MI["Managed Identity<br/>(PR / Apply 分離)"]
+        MI --> Blob["Azure Blob Storage<br/>(Blob Lease Lock)"]
+    end
+
+    subgraph GCP_ID["Google Cloud WIF & GCS"]
+        WIF["Workload Identity Federation"] --> SA["Service Account<br/>(PR / Apply 分離)"]
+        SA --> GCS["GCS Remote State<br/>(GCS Native Lock)"]
+    end
+
+    JWT --> STS
+    JWT --> Entra
+    JWT --> WIF
+```
+
 | 項目 | AWS | Azure | GCP |
 |---|---|---|---|
 | リージョン | 東京 | Japan East | 東京 |
@@ -65,6 +132,21 @@
 | Cleanup | version全削除、IAM上限、削除API権限、反映待ち | RG境界は明瞭。App Gateway削除の伝播遅延 | root→bootstrapの順序で各1回。既存資源とsoft-deleteを区別 |
 
 ## 4. 定量結果と集計上の注意
+
+### 管理リソース数とクリーンアップ実績の視覚化
+
+```mermaid
+xychart-beta
+    title "3クラウドのTerraform管理リソース数（Root vs Bootstrap）"
+    x-axis ["AWS", "Azure", "GCP"]
+    y-axis "リソース数 (件)" 0 --> 50
+    bar [39, 41, 25]
+    bar [9, 12, 13]
+```
+
+- **AWS**: Root 39件 + Bootstrap 9件 = 合計48リソース (`██████████ 100% 削除完了 / 残存 0`)
+- **Azure**: Root 41件 + Bootstrap 12件 = 合計53リソース (`██████████ 100% 削除完了 / 残存 0`)
+- **GCP**: Root 25件 + Bootstrap 13件 = 合計38リソース (`██████████ 100% 削除完了 / active 0`)
 
 | 指標 | AWS | Azure | GCP |
 |---|---:|---:|---:|
@@ -173,6 +255,28 @@ GCPはroot safe plan初回成功、意図しないdrift 0、No changes 13回、c
 **本実験から支持できるのは、前段の失敗を設計・確認手順へ反映する進め方が有効だったという実務的示唆である。** 単一の実施者・逐次実験であり、要件や構成、AIへの指示も完全に固定されていないため、改善をGCP自体の容易さやAIモデルの能力向上へ単独で帰属させることはできない。[G6](https://github.com/moruku36/gcp-ai-terraform-validation/blob/8fbc809bd787d46801d7ff8e030eb40c0db4b35d/docs/06-lessons-learned.md)
 
 ## 10. AI時代のクラウドエンジニアに何が残るのか
+
+```mermaid
+flowchart TB
+    subgraph Human["人間に残る高付加価値な責任・判断境界"]
+        H1["要件定義・可用性/予算/公開範囲の最終決定"]
+        H2["IAM / RBAC / WIF の信頼境界・アカウント本人確認"]
+        H3["本番Apply / 破壊的操作(Destroy)の実行承認"]
+        H4["AIの出力（Plan / 診断 / 差分）の妥当性レビュー"]
+    end
+
+    subgraph AI["AIへ委任できた自律実行ライフサイクル"]
+        A1["Terraform コード設計・モジュール実装"]
+        A2["OIDC / Remote State / CI/CD パイプライン自動化"]
+        A3["CloudWatch / Azure Monitor / Cloud Operations 監視構成"]
+        A4["カオス障害試験の注入・自動復旧検証"]
+        A5["API制約・構文・権限エラーの自己診断と限定修正"]
+        A6["安全な依存順序による完全クリーンアップ"]
+    end
+
+    Human ==>|"要件指示 & ガバナンス承認"| AI
+    AI -.->|"実行結果・証跡・No changes確認"| Human
+```
 
 | 責任・作業 | 今回AIへ委任できた範囲 | 人間に残る判断 |
 |---|---|---|
