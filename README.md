@@ -1,5 +1,7 @@
 # AWS + Terraform 検証環境
 
+**[AWS / Azure / GCP 横断・最終比較レポート](docs/10-multi-cloud-final-report.md)** — 実行結果、AIの失敗と復旧、人間の責任、再現性レビュー。
+
 ## 検証目的
 
 AI/Codex にどこまでAWSインフラ実装を任せられるかを検証した、最小構成かつ破棄可能なTerraform環境です。構築、障害修正、CI/CD、OIDC、Remote State、監視、障害試験、最終削除までの一連の検証を完了しています。
